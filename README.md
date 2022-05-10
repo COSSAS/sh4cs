@@ -1,3 +1,16 @@
+<div align="center">
+<a href="https://gitlab.com/cossas/sh4cs/-/tree/master"><img src="docs/SH4CS-logo.jpeg" height="100px" />
+
+![Website](https://img.shields.io/badge/website-cossas--project.org-orange)
+</div></a>
+
+<hr style="border:2px solid gray"> </hr>
+<div align="center">
+Extends Kubernetes and Docker platforms with self-healing properties inspired by the human immune system</div>
+<hr style="border:2px solid gray"> </hr>
+
+_All COSSAS projects are hosted on [GitLab](https://gitlab.com/cossas/sh4cs/) with a push mirror to GitHub. For issues/contributions check [CONTRIBUTING.md](https://gitlab.com/cossas/home/-/blob/main/CONTRIBUTING.md)_ 
+
 This repository features all the software developed for the self-healing proof-of-concept. Below you can find information on each component and where it is located in the directory structure
 
 # Directory structure
