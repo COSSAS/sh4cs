@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: regeneration-demo
+  labels:
+    app: regeneration-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: regeneration-demo
+  template:
+    metadata:
+      labels:
+        app: regeneration-demo
+        # sidecar.istio.io/inject: "true"
+    spec:
+      shareProcessNamespace: true
+      containers:
+        - name: python-lymphocyte
+          image: "ci.tno.nl:4567/tri/self-healing/sh4cs2-testbed/lymphocyte:development"
+          ports:
+            - containerPort: 12345
+              name: lymphocyte-http
+          env:
+            - name: LYMPHOCYTE_CONFIG
+              value: /lymphocyte/settings.yaml
+          volumeMounts:
+            - name: lymphocyte-config
+              mountPath: /lymphocyte
+          readinessProbe:
+            httpGet:
+              path: /readinessProbe
+              port: 12345
+            periodSeconds: 1
+          securityContext:
+            runAsUser: 1234
+            runAsGroup: 1234
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            # Ideally this would be false, but python does not play nice with passing through capabilities.
+            allowPrivilegeEscalation: true
+            capabilities:
+              add:
+                - KILL
+              drop:
+                - ALL
+        - name: test-app
+          image: "ci.tno.nl:4567/tri/self-healing/sh4cs2-testbed/testapp:development"
+          env:
+            - name: BASE_URL
+              value: "http://test-app2"
+          ports:
+            - containerPort: 8000
+              name: http
+          volumeMounts:
+            - name: app-logs
+              mountPath: /logs
+          startupProbe:
+            httpGet:
+              path: /startupProbe
+              port: 12345
+            periodSeconds: 1
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /livenessProbe
+              port: 12345
+            periodSeconds: 1
+            initialDelaySeconds: 10
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+      volumes:
+        - name: lymphocyte-config
+          configMap:
+            name: regeneration-demo-lymphocyte-config
+        - name: app-logs
+          emptyDir: {}

@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - regeneration-demo.yaml
+  - regeneration-demo-config.yaml
+  - scenario-tester.yaml
+  - test-app.yaml
+  - test-app-config.yaml
+  - test-app2.yaml
+  - test-app2-config.yaml

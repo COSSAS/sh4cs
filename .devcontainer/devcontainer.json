@@ -1,0 +1,73 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/docker-existing-docker-compose
+{
+  "name": "Debian",
+  // Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
+  "image": "mcr.microsoft.com/devcontainers/base:bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {},
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.10"
+    },
+    "ghcr.io/devcontainers-contrib/features/poetry:2": {
+      "version": "1.8.3"
+    },
+    "ghcr.io/devcontainers-contrib/features/pre-commit:2": {},
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "./k9s": {},
+    "./vhs": {},
+    "./hadolint": {},
+  },
+  "containerEnv": {
+    "POETRY_VIRTUALENVS_CREATE": "false",
+    "PYTHONPATH": "/workspaces/${localWorkspaceFolderBasename}/src/"
+  },
+  // Features to add to the dev container. More info: https://containers.dev/features.
+  // "features": {},
+  // Use 'forwardPorts' to make a list of ports inside the container available locally.
+  // "forwardPorts": [],
+  // Uncomment the next line if you want start specific services in your Docker Compose config.
+  // "runServices": [],
+  // Uncomment the next line if you want to keep your containers running after VS Code shuts down.
+  // "shutdownAction": "none",
+  // Configure tool-specific properties.
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.azure-account",
+        "ms-kubernetes-tools.vscode-aks-tools",
+        "ms-kubernetes-tools.vscode-kubernetes-tools",
+        "redhat.vscode-yaml",
+        "ms-python.python",
+        "EditorConfig.EditorConfig",
+        "ms-python.pylint",
+        "ms-python.black-formatter",
+        "ms-python.mypy-type-checker",
+      ],
+      "settings": {
+        "[python]": {
+          "editor.defaultFormatter": "ms-python.black-formatter",
+          "editor.formatOnSave": true,
+          "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+          },
+        },
+        "isort.args": [
+          "--profile",
+          "black"
+        ],
+        "pylint.cwd": "${fileDirname}",
+        "pylint.importStrategy": "fromEnvironment",
+        "black-formatter.cwd": "${fileDirname}",
+        "black-formatter.importStrategy": "fromEnvironment",
+      }
+    }
+  },
+  // "postCreateCommand": "cat .devcontainer/.bashrc >> ~/.bashrc"
+  "postCreateCommand": "echo 'source ~/.bash_aliases' >> ~/.bashrc"
+  // Configure tool-specific properties.
+  // "customizations": {},
+  // Uncomment to connect as an existing user other than the container default. More info: https://aka.ms/dev-containers-non-root.
+  // "remoteUser": "devcontainer"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "vhs",
+  "version": "0.0.1",
+  "name": "Charm VHS",
+  "installsAfter": [
+    "ghcr.io/devcontainers/features/common-utils"
+  ]
+}

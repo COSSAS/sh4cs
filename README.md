@@ -1,102 +1,138 @@
-<div align="center">
-<a href="https://gitlab.com/cossas/sh4cs/-/tree/master"><img src="docs/SH4CS-logo.jpeg" height="100px" />
+# Self-Healing for Cyber Security 2.0 (SH4CS)
 
-![Website](https://img.shields.io/badge/website-cossas--project.org-orange)
-</div></a>
+SH4CS extends Kubernetes with regeneration and self-healing properties inspired by the human immune system.
 
-<hr style="border:2px solid gray"> </hr>
-<div align="center">
-Extends Kubernetes and Docker platforms with self-healing properties inspired by the human immune system</div>
-<hr style="border:2px solid gray"> </hr>
-
-_All COSSAS projects are hosted on [GitLab](https://gitlab.com/cossas/sh4cs/) with a push mirror to GitHub. For issues/contributions check [CONTRIBUTING.md](https://gitlab.com/cossas/home/-/blob/main/CONTRIBUTING.md)_ 
-
-This repository features all the software developed for the self-healing proof-of-concept. Below you can find information on each component and where it is located in the directory structure
-
-# Directory structure
-## Components
-### Attacker brute force
-Sample application that can be used to perform a DoS attack on the [Authentication-bastion](components/web-application/authentication-bastion).
-
-### host-components
-#### [HDDP](components/host-components/hddp)
-Single point of access to the underlying docker daemon of a host. Used by the lymphocyte to obtain information on running containers and their status.
-
-#### [Syslog-ng](components/host-components/syslog-ng)
-Syslog server used by Falco to deliver a log stream. 
-
-#### [Falco](components/host-components/falco)
-Pinned version of Falco, used for anomaly detection using eBPF. 
-
-### Pod  Components
-#### [Channel Frequency Monitor](components/pod-components/redis-channel-monitor)
-Small application that counts the amount of events added in a redis pub/sub channel.
-If a certain treshold of messages over minute is exceeded, a message is published on another pub/sub channel.
-
-#### [Lymphocyte](components/pod-components/lymphocyte)
-In the PoC setup a lymphocyte is a python docker container that runs together with a job container in a kubernetes pod. The lymphocyte container is inspired by T Killer cells. It decides if and when to send to the Docker Proxy the signal to kill (or pause or restart) the job container.
-
-### Shared
-Python library code used by multiple components in the proof of concept.
-
-### Web application
-#### [Authentication-bastion](components/web-application/authentication-bastion)
-Sample authentication service that can provide tokens and validation of tokens for other services.
-
-#### [Vulnerable php container](components/web-application/vulnerable-php-container)
-PHP server that is exploitable to remote code execution. Is not accessed directly but through the [nginx-frontend](components/web-application/nginx-frontend)
-
-#### [NGINX frontend](components/web-application/nginx-frontend)
-Web proxy that handles traffic towards [Authentication-bastion](components/web-application/authentication-bastion) and [Vulnerable php container](components/web-application/vulnerable-php-container)
-
-## Deployments
-### Host-deployment
-Contains descriptors and docker-compose files to start the HDDP, Falco, Mongo and syslog on the host
-
-### Pod-deployment
-Contains descriptors to start the self-healing pod, featuring the lymphocyte, frequency monitor, nginx, php, authentication bastion.
-
-## Reports
-Features an overview per software component with ran (security) scans and their results for each component listed under `components`
-
-# Usage
-Prepare `kubernetes` on a host somewhere, according to normal procedures. `Docker` and `docker-compose` also need to be installed
-Build components using `bash build_components.sh`
-
-## PoC
-You can either start the components manually yourself by following below options, or run `bash deploy.sh` in the root folder. 
-
-### Host components
-Enter [deployment/host-deployment](deployment/host-deployment), run `bash deploy.sh`
-
-This will start the HDDP, Falco, Mongo and Syslog
-
-### Self healing pod
-After this is done, go into  [deployment/pod-deployment](deployment/pod-deployment)
-
-Start the deployment `bash deploy.sh`
-
-Show the logs of lymphcyte using ` kubelctl logs <lymphocyte> -f`
+RELEASED: March 5th, 2025\
+LANGUAGE: Python\
+LICENSE: Apache 2.0
 
 
-### Triggering external anomaly
-```
-docker exec -it <php-container> bash
-touch /dev
+## Documentation
+Documentation of the source code can be found through [docs].
+
+## Context and background
+In the continuous battle between cyber attackers and defenders, the ultimate objective is to make software and systems autonomously cyber resilient. One way to implement autonomous resilience on the software deployment level is provided by TNO’s Self-Healing for Cyber Security (SH4CS) software, inspired by biological defence mechanisms.
+
+It makes use of defensive mechanisms of the human body, where from three fundamental properties of the immune system inspiration is taken from, to make their systems autonomously resilient:
+
+1.	**Disposability**: cell duplication and programmed or targeted cell death results in continuous cell regeneration, eliminating undetected abnormalities and reducing the likelihood of successful infections. Disposability of body cells is a prerequisite for the effectiveness of the immune system.
+2.	**Distribution**: the more local the defence mechanism, the faster (but also less targeted) the response. The innate immune system acts much faster than the adaptive immune system, which in turn is faster than immunization.
+3.	**Response proportionality**: the innate immune system is always the first line of defence. The more energy-consuming adaptive immune system is only activated to support the innate one when and where necessary.
+
+The current SH4CS software primarily consists of Python code that implements (a) a decentralized rule system – also referred to as ‘Lymphocyte software’ – that executes healing functionality for an individual application container (by running as a sidecar in the same Kubernetes POD), (b) a metrics processor that enables the specification of monitorable metrics (using the Prometheus open source software) that will alert the Lymphocyte software. The software code was developed for deployment in modern container platforms empowered by Kubernetes and Prometheus.
+
+An architecture diagram can be found [here](img/architecture_overview_SH4CS_realized.png), alongside a more elaborate diagram of what the vision of Self-Healing for Cyber Security looks like. The draw.io files are included.
+
+
+## Running the demos locally
+
+### Preparing minikube
+First make sure that you have [minikube](https://minikube.sigs.k8s.io/docs/start/) installed, then start a local minikube cluster.
+```shell
+minikube start
 ```
 
-### Triggering internal anomaly
-Run a random container with bash in k8s
-```
- kubectl run -it --image debian:latest debian-bash
-```
-
-Attach to it, e.g.:
-``` 
-docker exec -it <k8s-debian-container> bash
+Next build the development images
+```shell
+docker compose -f compose.build.yaml build
 ```
 
-Send login attempts with bad password, 10+ times:
+Then load the development images into the cluster so we don't have to deal with pulling images from a (private) repository
+```shell
+minikube image load ci.tno.nl:4567/tri/self-healing/sh4cs2-testbed/lymphocyte:development
+minikube image load ci.tno.nl:4567/tri/self-healing/sh4cs2-testbed/testapp:development
+minikube image load ci.tno.nl:4567/tri/self-healing/sh4cs2-testbed/scenario-tester:development
 ```
-curl -k -X POST  https://nginx:443/api/v1/user/login -H  "accept: application/json" --data 'username=sample_username&password=xyz'
+
+Next, apply all manifests at once
+```shell
+kubectl apply -k manifests/
 ```
+
+
+### Regeneration demo
+
+The regeneration demo demonstrates the pod becoming unready 450 seconds after the lympho has started, and restarting the test application 600s after the lympho has started (there can be some discrepancy ).
+
+This demo is already running after applying the manifests.
+
+Simply watch the regeneration deployment
+```shell
+kubectl get pod --watch -l app=regeneration-demo
+```
+Or the events related to the pod
+```shell
+kubectl events --for "pod/$(kubectl get pods -l app=regeneration-demo --output jsonpath='{.items[0].metadata.name}')" --watch
+```
+
+Or using the included monitor
+```shell
+kubectl exec deploy/scenario-tester -it -- /opt/app/monitor.py
+```
+
+Then look at the `regeneration-demo` deployment.
+Its readiness probe should turn red after 75% of the TTL has passed, and should restart after 100% of the TTL has passed.
+
+![](examples/regeneration-demo.mp4)
+
+
+### Threat-level demo
+
+This demo demonstrates increments in threat levels.
+In this scenario there are two ways to fire prometheus alerts:
+- Perform failed logins
+- Generate download file errors (status code 404)
+Each of these alerts lets the threat-level increment by one.
+When the the threat-level is 2, and either of the alerts fire, then the application will be restarted.
+
+To get this demo running, start the included monitor:
+```shell
+kubectl exec deploy/scenario-tester -it -- /opt/app/monitor.py
+```
+
+Next, in a different shell execute the script
+```shell
+kubectl exec deploy/scenario-tester -it -- /opt/app/test-scenario-bruteforce.py
+```
+
+![](examples/bruteforce-demo.mp4)
+
+### Passing threat-level demo
+
+This demo demonstrates threat levels being passed to other applications.
+When the threat-level of `testapp` is zero, the `testapp2` is not rate-limited, but in response to the threat-level of `testapp` becoming nonzero, the `testapp2` becomes rate-limited.
+Like in previous demos, a way to trigger an increase of the threat-level of `testapp` is to perform failed logins.
+
+To get this demo running, start the included monitor:
+```shell
+kubectl exec deploy/scenario-tester -it -- /opt/app/monitor.py
+```
+
+Next, in a different shell execute the script
+```shell
+kubectl exec deploy/scenario-tester -it -- /opt/app/test-scenario-rate-limiter.py
+```
+
+![](examples/rate-limiter-demo.mp4)
+
+
+### Proxying readiness/liveness probes
+
+This demo demonstrated the ability to perform readiness and liveness probes from the lympho container to the application container.
+The application container's readiness and liveness probe endpoints can be set at will using an api.
+Meanwhile, the liveness probe of the application container points to the lympho container, which gives the latter the ability to restart the application container via probes.
+
+To get this demo running, start the included monitor:
+```shell
+kubectl exec deploy/scenario-tester -it -- /opt/app/monitor.py
+```
+
+Next, in a different shell execute the script
+```shell
+kubectl exec deploy/scenario-tester -it -- /opt/app/test-scenario-healthcheck.py
+```
+
+![](examples/healthcheck-demo.mp4)
+
+## Source project
+V.1.0 of this software was originally developed within the Partnership for Cyber Security Innovation (PCSI), a Dutch innovation ecosystem that features leading companies across several industries. V2.0 builds on feedback from PCSI partners and additional insights, and was fully developed by TNO.

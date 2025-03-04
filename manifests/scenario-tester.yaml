@@ -1,0 +1,63 @@
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: allow-port-forward
+rules:
+- apiGroups: [""]
+  resources: ["pods/portforward"]
+  verbs: ["get", "list", "create"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: scenario-tester
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: allow-port-forward
+subjects:
+- kind: ServiceAccount
+  name: scenario-tester
+roleRef:
+  kind: Role
+  name: allow-port-forward
+  apiGroup: ""
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scenario-tester
+  labels:
+    app: scenario-tester
+spec:
+  selector:
+    matchLabels:
+      app: scenario-tester
+  template:
+    metadata:
+      labels:
+        app: scenario-tester
+    spec:
+      serviceAccountName: scenario-tester
+      containers:
+        - image: "ci.tno.nl:4567/tri/self-healing/sh4cs2-testbed/scenario-tester:development"
+          name: scenario-tester
+          # env:
+          #   - name: TESTAPP_BASEURL
+          #     value: "http://test-app"
+          #   - name: TESTAPP_LYMPHOCYTE_BASEURL
+          #     value: "http://test-app:12345"
+          #   - name: TESTAPP2_LYMPHOCYTE_BASEURL
+          #     value: "http://test-app2:12345"
+          #   - name: REGENERATION_DEMO_BASEURL
+          #     value: "http://regeneration-demo"
+          #   - name: REGENERATION_DEMO_LYMPHOCYTE_BASEURL
+          #     value: "http://regeneration-demo:12345"

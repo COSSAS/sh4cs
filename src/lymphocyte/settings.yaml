@@ -1,0 +1,129 @@
+actions:
+  - kind: debug
+    name: debug
+    message: |
+      {% debug %}
+  - kind: debug
+    name: debug_threat_level
+    message: |
+      Current threat level: {{ threat_level_manager.current }}
+  - kind: debug
+    name: debug_threat_level_high
+    message: |
+      Threat level high enough
+      {% debug %}
+
+  - kind: send_rest_request
+    name: enable_rate_limiter
+    url: http://localhost:8000/enable_rate_limiter
+  - kind: send_rest_request
+    name: disable_rate_limiter
+    url: http://localhost:8000/disable_rate_limiter
+
+  - kind: increment_threat_level
+    name: incrementThreatLevel
+    for_seconds: 30
+  - kind: debug
+    name: debug_all_threat_levels
+    message: |
+      All threat levels:
+      {{ other_threat_levels_manager.get() | join("\n") }}
+      Max: {{ other_threat_levels_manager.get() | max(attribute="level") }}
+  - kind: debug
+    name: debug_all_prometheus_alerts
+    message: |
+      All prometheus alerts:
+      {{ prometheus_manager.get() | join("\n") }}
+
+triggers:
+  - kind: tick_event
+    name: tick
+    every_n_seconds: 3
+  - kind: webhook
+    name: webhook_asdf
+    exact_match: asdf
+  - kind: threat_level
+    name: threat_level_self_changed
+    identifier: self
+  - kind: threat_level
+    name: threat_level_other_changed
+    identifier: other
+  - kind: prometheus_alert
+    name: prometheus_alert_test
+    alertname: Test
+
+rules:
+  - kind: conditional
+    triggers:
+      - webhook_asdf
+    condition: #
+      true or false
+    actions:
+      - debug_threat_level
+      - incrementThreatLevel
+  - kind: conditional
+    triggers:
+      - webhook_asdf
+    condition: #
+      threat_level_manager.current >= 2
+    actions:
+      - debug_threat_level_high
+
+  - kind: conditional
+    triggers:
+      - threat_level_self_changed
+    condition: #
+      "true"
+    actions:
+      - debug_all_threat_levels
+
+  - kind: conditional
+    triggers:
+      - threat_level_other_changed
+    condition: #
+      "true"
+    actions:
+      - debug_all_threat_levels
+
+  - kind: conditional
+    triggers:
+      - prometheus_alert_test
+    condition: #
+      "true"
+    actions:
+      - debug_all_prometheus_alerts
+
+  - triggers: ["tick"]
+    actions: ["debug"]
+
+neighbors:
+  - identifier: other
+    threat_level_websocket_url: ws://127.0.0.1:12345/threat_level
+
+incoming_probes:
+  startup_expression: >
+    true
+  readiness_expression: >
+    ttl_manager.fraction_passed() < 0.75
+  liveness_expression: >
+    ttl_manager.fraction_passed() < 1
+
+outgoing_probes:
+  startup:
+    path: /probe/startup
+    port: 8000
+    initial_delay_seconds: 5
+    period_seconds: 3
+  readiness:
+    path: /probe/ready
+    port: 8000
+    initial_delay_seconds: 5
+    period_seconds: 3
+  # liveness:
+  #   path: /probe/health
+  #   port: 8000
+  #   initial_delay_seconds: 5
+  #   period_seconds: 3
+
+ttl_manager:
+  base_ttl_seconds: 600

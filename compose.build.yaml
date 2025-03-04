@@ -1,0 +1,15 @@
+services:
+  lymphocyte:
+    image: "ci.tno.nl:4567/tri/self-healing/sh4cs2-testbed/lymphocyte:development"
+    build:
+      context: src/lymphocyte
+
+  testapp:
+    image: "ci.tno.nl:4567/tri/self-healing/sh4cs2-testbed/testapp:development"
+    build:
+      context: src/testapp
+
+  scenario-tester:
+    image: "ci.tno.nl:4567/tri/self-healing/sh4cs2-testbed/scenario-tester:development"
+    build:
+      context: src/scenario-tester
