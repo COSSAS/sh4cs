@@ -1,0 +1,146 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: testapp-alertmanager-config
+data:
+  alertmanager.yml: |-
+    route:
+      receiver: some_receiver
+      group_wait: 1s
+      group_interval: 5s
+      repeat_interval: 60s
+    receivers:
+      - name: some_receiver
+        webhook_configs:
+          - url: http://127.0.0.1:12345/alertmanager_webhook
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: testapp-lymphocyte-config
+data:
+  settings.yaml: |-
+    triggers:
+      - kind: prometheus_alert
+        name: prometheus_alert_cpu
+        alertname: High CPU usage
+
+      - kind: prometheus_alert
+        name: prometheus_alert_logins
+        alertname: Any failed logins
+
+      - kind: prometheus_alert
+        name: prometheus_alert_errors
+        alertname: Server errors
+
+      - kind: prometheus_alert
+        name: prometheus_alert_download_errors
+        alertname: Download file errors
+
+      - kind: webhook
+        name: webhook_increase_threat_level
+        exact_match: increase_threat_level
+
+      - kind: threat_level
+        name: threat_level_self_changed
+        identifier: self
+
+    actions:
+      - kind: increment_threat_level
+        name: increment_threat_level
+        for_seconds: 60
+      - kind: set_TTL
+        name: set_ttl_one
+        to_seconds: 1
+    rules:
+      - kind: conditional
+        triggers:
+          - prometheus_alert_errors
+        condition: >
+          (prometheus_manager.get(alertname_eq="Server errors",status_eq=True) | count) > 0
+        actions:
+          - increment_threat_level
+
+      - kind: conditional
+        triggers:
+          - prometheus_alert_download_errors
+        condition: >
+          (prometheus_manager.get(alertname_eq="Download file errors",status_eq=True) | count) > 0
+        actions:
+          - increment_threat_level
+
+      - kind: conditional
+        triggers:
+          - prometheus_alert_logins
+        condition: >
+          (prometheus_manager.get(alertname_eq="Any failed logins",status_eq=True) | count) > 0
+        actions:
+          - increment_threat_level
+
+      - kind: conditional
+        triggers:
+          - webhook_increase_threat_level
+        condition: "true"
+        actions:
+          - increment_threat_level
+      - kind: conditional
+        triggers:
+          - prometheus_alert_errors
+          - prometheus_alert_download_errors
+          - prometheus_alert_logins
+          - threat_level_self_changed
+        condition: >
+          (
+            (prometheus_manager.get(alertname_eq="Any failed logins",status_eq=True) | count) > 0
+            or (prometheus_manager.get(alertname_eq="Download file errors",status_eq=True) | count) > 0
+          )
+          and threat_level_manager.current >= 2
+        actions:
+          - set_ttl_one
+    neighbors: []
+
+    ttl_manager:
+      base_ttl_seconds: 86400
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: testapp-prometheus-config
+data:
+  alerts.yml: |-
+    groups:
+    - name: example
+      interval: 1s
+      rules:
+        - alert: High CPU usage
+          expr: rate(process_cpu_seconds_total{job="testapp"}[20s]) > 0.9
+        - alert: Any failed logins
+          expr: rate(http_requests_total{job="testapp",handler="/token",status!="2xx"}[10s]) > 0
+        - alert: Server errors
+          expr: rate(http_requests_total{job="testapp",status="5xx"}[10s]) > 0
+        - alert: Download file errors
+          expr: rate(http_requests_total{job="testapp",handler="/download_file",status!="2xx"}[10s]) > 0
+  prometheus.yml: |-
+    global:
+      # How frequently to scrape targets by default.
+      scrape_interval: 1s
+      scrape_timeout: 1s
+    rule_files:
+      - /etc/prometheus/alerts.yml
+    scrape_configs:
+      - job_name: testapp
+        static_configs:
+          - targets:
+              - "127.0.0.1:8000"
+      - job_name: lymphocyte
+        static_configs:
+          - targets:
+              - "127.0.0.1:12345"
+    alerting:
+      alertmanagers:
+        - scheme: http
+          static_configs:
+            - targets:
+                - "127.0.0.1:9093"

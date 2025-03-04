@@ -1,0 +1,53 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: regeneration-demo-lymphocyte-config
+data:
+  settings.yaml: |-
+    triggers:
+      - kind: tick_event
+        name: tick
+        every_n_seconds: 1
+    rules:
+      - kind: conditional
+        triggers:
+          - tick
+        condition: #
+          ttl_manager.fraction_passed() >= 1
+        actions:
+          - kill
+          - restart_TTL
+    actions:
+      - kind: kill
+        name: kill
+        uid: 1000
+      - kind: restart_TTL
+        name: restart_TTL
+    neighbors: []
+
+    incoming_probes:
+      readiness_expression: >
+        (ttl_manager.fraction_passed() < 0.75) and outgoing_readiness_probe_manager.status()
+      liveness_expression: >
+        outgoing_liveness_probe_manager.status()
+
+    outgoing_probes:
+      startup:
+        path: /probe/startup
+        port: 8000
+        initial_delay_seconds: 0
+        period_seconds: 1
+      readiness:
+        path: /probe/ready
+        port: 8000
+        initial_delay_seconds: 0
+        period_seconds: 1
+      liveness:
+        path: /probe/health
+        port: 8000
+        initial_delay_seconds: 0
+        period_seconds: 1
+
+    ttl_manager:
+      base_ttl_seconds: 600

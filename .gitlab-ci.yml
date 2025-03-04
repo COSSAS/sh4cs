@@ -1,0 +1,404 @@
+workflow:
+  auto_cancel:
+    on_new_commit: interruptible
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_EVENT_TYPE == 'merge_train'
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+stages:
+  - lint
+  - build-dev
+  - test
+  - build
+  - deploy
+  - reconcile
+
+pre-commit:
+  stage: lint
+  interruptible: true
+  image:
+    name: python:3.10.16-alpine@sha256:4c4097e46608e9b9025a486e3b72d628ac8947a3caa20f142c2e8c0029a12b21
+    entrypoint: [""]
+  script:
+    - apk add git
+    - wget https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
+    - wget https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64.sha256
+    - sha256sum -c hadolint-Linux-x86_64.sha256
+    - install hadolint-Linux-x86_64 /usr/local/bin/hadolint
+
+    - pip install pre-commit
+    - pre-commit run --all-files
+
+lint-kubeconform:
+  stage: lint
+  image:
+    name: ghcr.io/yannh/kubeconform:v0.6.6-alpine@sha256:47141997365b1f6aa914b2e801cb9772b94c2696c279e2046a4517d5bfd8a09a
+    entrypoint: [""]
+  script:
+    - apk add curl
+    - mkdir -p /tmp/flux-crd-schemas/master-standalone
+    # - curl -sL https://github.com/fluxcd/flux2/releases/latest/download/crd-schemas.tar.gz | tar zxf - -C /tmp/flux-crd-schemas/master-standalone
+    - /kubeconform
+      -ignore-missing-schemas
+      -ignore-filename-pattern ".sops.yaml"
+      -schema-location default
+      -schema-location /tmp/flux-crd-schemas
+      -output junit
+      manifests/ > junit.xml || true
+    - /kubeconform
+      -ignore-missing-schemas
+      -verbose
+      -summary
+      -ignore-filename-pattern ".sops.yaml"
+      -schema-location /tmp/flux-crd-schemas
+      -output pretty
+      manifests/
+  artifacts:
+    paths:
+      - junit.xml
+    reports:
+      junit:
+        - junit.xml
+  rules:
+    - changes:
+        - manifests/**/*
+        - .gitlab-ci.yml
+
+lint-kubeconform-strict:
+  stage: lint
+  image:
+    name: ghcr.io/yannh/kubeconform:v0.6.6-alpine@sha256:47141997365b1f6aa914b2e801cb9772b94c2696c279e2046a4517d5bfd8a09a
+    entrypoint: [""]
+  script:
+    - apk add curl
+    - mkdir -p /tmp/flux-crd-schemas/master-standalone-strict
+    # - curl -sL https://github.com/fluxcd/flux2/releases/latest/download/crd-schemas.tar.gz | tar zxf - -C /tmp/flux-crd-schemas/master-standalone-strict
+    # Skip Secrets in strict mode because of SOPS
+    - /kubeconform
+      -skip=Secret
+      -strict
+      -ignore-missing-schemas
+      -ignore-filename-pattern ".sops.yaml"
+      -schema-location /tmp/flux-crd-schemas
+      -output junit
+      manifests/ > junit-strict.xml || true
+    - /kubeconform
+      -skip=Secret
+      -strict
+      -ignore-missing-schemas
+      -verbose
+      -summary
+      -ignore-filename-pattern ".sops.yaml"
+      -schema-location /tmp/flux-crd-schemas
+      -output pretty
+      manifests/
+  artifacts:
+    paths:
+      - junit-strict.xml
+    reports:
+      junit:
+        - junit-strict.xml
+  rules:
+    - changes:
+        - manifests/**/*
+        - .gitlab-ci.yml
+
+.build:
+  interruptible: true
+  image:
+    name: gcr.io/kaniko-project/executor:v1.21.1-debug@sha256:0818d281f155b9bb1b1f0704e55939b9c440b0155cbbf65b567ca19e19e20223
+    entrypoint: [""]
+  # parallel:
+  #   matrix: !reference [.projects, matrix]
+  variables:
+    CONTEXT: src/$PROJECT
+    DOCKERFILE: src/$PROJECT/Dockerfile
+    IMAGE_NAME: $PROJECT
+    IMAGE_TAG: $CI_COMMIT_SHA
+    TARGET_STAGE: ""
+  script:
+    - /kaniko/executor
+      --context "$CI_PROJECT_DIR/${CONTEXT}"
+      --dockerfile "${DOCKERFILE}"
+      --cache=true --cache-copy-layers=true --cache-ttl=24h
+      --destination "$CI_REGISTRY_IMAGE/${IMAGE_NAME}:${IMAGE_TAG}"
+      --push-retry=5
+      --target "$TARGET_STAGE"
+      --image-name-tag-with-digest-file "digests/digest-$PROJECT.txt"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_EVENT_TYPE == 'merge_train'
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - changes:
+        - src/$PROJECT/**/*
+        - .gitlab-ci.yml
+
+.test:
+  stage: test
+  image:
+    name: ${CI_REGISTRY_IMAGE}/$PROJECT:${CI_COMMIT_SHA}-dev
+    entrypoint: [""]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_EVENT_TYPE == 'merge_train'
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - changes:
+        - src/$PROJECT/**/*
+        - .gitlab-ci.yml
+
+lymphocyte:dev-build:
+  extends: .build
+  stage: build-dev
+  variables:
+    PROJECT: lymphocyte
+    IMAGE_TAG: $CI_COMMIT_SHA-dev
+    TARGET_STAGE: dev
+
+lymphocyte:mypy:
+  extends: .test
+  needs: [lymphocyte:dev-build]
+  variables:
+    PROJECT: lymphocyte
+  script:
+    - cd src/lymphocyte
+    - mypy .
+      --no-install-types
+      --junit-xml reports/junit.xml
+      --junit-format per_file
+      --any-exprs-report reports
+      --txt-report reports
+      --cobertura-xml-report reports
+    - cat reports/index.txt
+    - cat reports/any-exprs.txt
+    - cat reports/types-of-anys.txt
+    - grep 'Total' reports/any-exprs.txt | sed 's/.* \([[:digit:]]\+\(\.[[:digit:]]\+\)\?\)%.*$/mypy_expression_coverage_percentage \1/' >> reports/metrics.txt
+    - grep 'Total' reports/index.txt | sed 's/.* \([[:digit:]]\+\(\.[[:digit:]]\+\)\?\)%.*$/mypy_imprecise_percentage \1/' >> reports/metrics.txt
+    - grep '<coverage' reports/cobertura.xml | sed 's/.*line-rate="\([^" ]*\)".*$/mypy_line_rate \1/' >> reports/metrics.txt
+  artifacts:
+    paths:
+      - "src/lymphocyte/reports/*"
+    reports:
+      junit: src/lymphocyte/reports/junit.xml
+      metrics: src/lymphocyte/reports/metrics.txt
+
+lymphocyte:pylint:
+  extends: .test
+  needs: [lymphocyte:dev-build]
+  variables:
+    PROJECT: lymphocyte
+  script:
+    - pylint src/lymphocyte/**/*.py
+      --rcfile src/lymphocyte/pyproject.toml
+      --output-format colorized
+
+lymphocyte:bandit:
+  extends: .test
+  needs: [lymphocyte:dev-build]
+  variables:
+    PROJECT: lymphocyte
+  script:
+    - bandit -c src/lymphocyte/pyproject.toml -r src/lymphocyte/
+
+lymphocyte:pylic:
+  extends: .test
+  needs: [lymphocyte:dev-build]
+  variables:
+    PROJECT: lymphocyte
+  script:
+    - cd src/lymphocyte
+    - pylic check
+
+
+lymphocyte:pylint-strict:
+  extends: .test
+  needs: [lymphocyte:dev-build]
+  allow_failure: true
+  variables:
+    PROJECT: lymphocyte
+  script:
+    - set -o pipefail
+    - pylint src/lymphocyte/**/*.py
+      --rcfile src/lymphocyte/pyproject.toml
+      --output-format colorized
+      --fail-under 7.1
+      --report y
+      --enable=all | tee >(grep 'Your' | sed 's|Your code has been rated at \([^/]*\).*$|pylint_rating \1|' >> metrics.txt)
+  artifacts:
+    reports:
+      metrics: metrics.txt
+
+lymphocyte:test-coverage:
+  extends: .test
+  needs: [lymphocyte:dev-build]
+  variables:
+    PROJECT: lymphocyte
+  script:
+    - pytest
+      --cov=lymphocyte
+      --cov-report term
+      --cov-report "xml:cobertura.xml"
+      --junitxml junit.xml
+      src/lymphocyte
+  coverage: '/^TOTAL.*\s+(\d+\%)$/'
+  artifacts:
+    reports:
+      junit: junit.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: cobertura.xml
+
+lymphocyte:build:
+  extends: .build
+  stage: build
+  variables:
+    PROJECT: lymphocyte
+    TARGET_STAGE: prod
+  artifacts:
+    paths:
+      - "digests/digest-$PROJECT.txt"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_EVENT_TYPE == 'merge_train'
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+
+testapp:build:
+  extends: .build
+  stage: build
+  variables:
+    PROJECT: testapp
+    TARGET_STAGE: ""
+  artifacts:
+    paths:
+      - "digests/digest-$PROJECT.txt"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_EVENT_TYPE == 'merge_train'
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+
+scenario-tester:build:
+  extends: .build
+  stage: build
+  variables:
+    PROJECT: scenario-tester
+    TARGET_STAGE: ""
+  artifacts:
+    paths:
+      - "digests/digest-$PROJECT.txt"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_EVENT_TYPE == 'merge_train'
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+
+package:
+  stage: deploy
+  interruptible: true
+  image:
+    name: alpine:3.21.2@sha256:56fa17d2a7e7f168a043a2712e63aed1f8543aeafdcee47c58dcffe38ed51099
+    entrypoint: [""]
+  variables:
+    IMAGE_NAME: $CI_REGISTRY_IMAGE
+    IMAGE_TAG: $CI_COMMIT_SHA
+  script:
+    - ls digests/ || true
+    - wget https://github.com/fluxcd/flux2/releases/download/v2.4.0/flux_2.4.0_linux_amd64.tar.gz
+    - echo "7b70b75af20e28fc30ee66cf5372ec8d51dd466fd2ee21aa42690984de70b09b  flux_2.4.0_linux_amd64.tar.gz" | sha256sum -c
+    - tar -xzvf flux_2.4.0_linux_amd64.tar.gz flux
+    - install flux /usr/local/bin/flux && rm flux
+    - wget https://dl.k8s.io/release/v1.32.0/bin/linux/amd64/kubectl
+    - echo "646d58f6d98ee670a71d9cdffbf6625aeea2849d567f214bc43a35f8ccb7bf70  kubectl" | sha256sum -c
+    - install kubectl /usr/local/bin/kubectl && rm kubectl
+    - wget https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.4.2/kustomize_v5.4.2_linux_amd64.tar.gz
+    - echo "881c6e9007c7ea2b9ecc214d13f4cdd1f837635dcf4db49ce4479898f7d911a3  kustomize_v5.4.2_linux_amd64.tar.gz" | sha256sum -c
+    - tar -xzvf kustomize_v5.4.2_linux_amd64.tar.gz kustomize
+    - install kustomize /usr/local/bin/kustomize && rm kustomize
+    - for filename in digests/digest-*.txt; do
+        if [[ ! -r "$filename" ]]; then
+          continue;
+        fi;
+        echo "$filename";
+        cat "$filename";
+        image="$(cat "$filename" )";
+        (cd manifests; kustomize edit set image "$image");
+      done
+    - mkdir -p kustomize-out
+    - kubectl kustomize ./manifests --output ./kustomize-out
+    - CLEANED_REPOSITORY_URL="$(echo $CI_REPOSITORY_URL | sed 's|\(.*://\).*@\(.*\)|\1\2|' )"
+    - echo $CLEANED_REPOSITORY_URL
+    # Stop here, don't push if it is not the default branch.
+    - if [[ "$CI_COMMIT_BRANCH" != "$CI_DEFAULT_BRANCH" ]]; then exit 0; fi
+    - flux push artifact oci://$CI_REGISTRY_IMAGE/manifests:$CI_COMMIT_SHA
+        --path="./manifests"
+        --source="$CLEANED_REPOSITORY_URL"
+        --revision="$CI_COMMIT_SHORT_SHA"
+        --creds="$CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD"
+        --annotations="org.opencontainers.image.url=$CI_PROJECT_URL"
+        --annotations="org.opencontainers.image.title=$CI_PROJECT_NAME"
+        --annotations="com.gitlab.job.id=$CI_JOB_ID"
+        --annotations="com.gitlab.job.url=$CI_JOB_URL"
+        --output=json
+    - |
+      flux tag artifact oci://$CI_REGISTRY_IMAGE/manifests:$CI_COMMIT_SHA \
+        --creds="$CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD" \
+        --tag latest
+  artifacts:
+    paths:
+      - "kustomize-out/"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_EVENT_TYPE == 'merge_train'
+      exists:
+        - manifests/kustomization.yaml
+      changes:
+        - manifests/*
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      exists:
+        - manifests/kustomization.yaml
+
+trigger-reconcile:
+  stage: reconcile
+  interruptible: true
+  variables:
+    OCI_SOURCE_NAME: "sh4cs2-testbed"
+  trigger:
+    project: TRI/self-healing/infrastructure
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      exists:
+        - manifests/kustomization.yaml
+
+
+pages:
+  stage: deploy
+  image:
+    name: ${CI_REGISTRY_IMAGE}/$PROJECT:${CI_COMMIT_SHA}-dev
+    entrypoint: [""]
+  script:
+    - pdoc src/lymphocyte -o public
+  variables:
+    PROJECT: lymphocyte
+  artifacts:
+    paths:
+      - "public"
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  environment:
+    name: Production
+    url: "$CI_PAGES_URL"
+
+pages-dev:
+  stage: deploy
+  image:
+    name: ${CI_REGISTRY_IMAGE}/$PROJECT:${CI_COMMIT_SHA}-dev
+    entrypoint: [""]
+  script:
+    - pdoc src/lymphocyte -o public
+  variables:
+    PROJECT: lymphocyte
+  artifacts:
+    paths:
+      - "public"
+  environment:
+    name: Develop
+    url: "$CI_JOB_URL/artifacts/file/public/index.html"
+  rules:
+    # Same rules as the building of lympho-dev
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_EVENT_TYPE == 'merge_train'
+    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+      changes:
+        - src/$PROJECT/**/*
+        - .gitlab-ci.yml

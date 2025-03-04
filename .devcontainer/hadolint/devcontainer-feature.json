@@ -1,0 +1,8 @@
+{
+  "id": "hadolint",
+  "version": "0.0.1",
+  "name": "hadolint",
+  "installsAfter": [
+    "ghcr.io/devcontainers/features/common-utils"
+  ]
+}
