@@ -21,7 +21,7 @@ LICENSE: Apache 2.0
 
 
 ## Documentation
-Documentation of the source code can be found through [docs].
+Documentation of the source code can be found through [docs](https://cossas.gitlab.io/sh4cs).
 
 ## Context and background
 In the continuous battle between cyber attackers and defenders, the ultimate objective is to make software and systems autonomously cyber resilient. One way to implement autonomous resilience on the software deployment level is provided by TNO’s Self-Healing for Cyber Security (SH4CS) software, inspired by biological defence mechanisms.
