@@ -12,7 +12,6 @@ stages:
   - test
   - build
   - deploy
-  - reconcile
 
 pre-commit:
   stage: lint
@@ -348,19 +347,6 @@ package:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       exists:
         - manifests/kustomization.yaml
-
-trigger-reconcile:
-  stage: reconcile
-  interruptible: true
-  variables:
-    OCI_SOURCE_NAME: "sh4cs2-testbed"
-  trigger:
-    project: TRI/self-healing/infrastructure
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      exists:
-        - manifests/kustomization.yaml
-
 
 pages:
   stage: deploy
