@@ -1,5 +1,5 @@
 <div align="center">
-<a href="https://gitlab.com/cossas/sh4cs/-/tree/master"><img src="img/SH4CS-logo.jpeg" height="100px" />
+<a href="https://gitlab.com/cossas/sh4cs/-/tree/master"><img src="img/SH4CS-logo.jpg" height="100px" />
 
 ![Website](https://img.shields.io/badge/website-cossas--project.org-orange)
 </div></a>
