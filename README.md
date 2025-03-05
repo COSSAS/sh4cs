@@ -1,14 +1,27 @@
+<div align="center">
+<a href="https://gitlab.com/cossas/sh4cs/-/tree/master"><img src="img/SH4CS-logo.jpg" height="100px" />
+
+![Website](https://img.shields.io/badge/website-cossas--project.org-orange)
+</div></a>
+
+<hr style="border:2px solid gray"> </hr>
+<div align="center">
+SH4CS extends Kubernetes with regeneration and self-healing properties inspired by the human immune system.</div>
+<hr style="border:2px solid gray"> </hr>
+
+_All COSSAS projects are hosted on [GitLab](https://gitlab.com/cossas/sh4cs/) with a push mirror to GitHub. For issues/contributions check [CONTRIBUTING.md](https://gitlab.com/cossas/home/-/blob/main/CONTRIBUTING.md)_
+
+
 # Self-Healing for Cyber Security 2.0 (SH4CS)
 
-SH4CS extends Kubernetes with regeneration and self-healing properties inspired by the human immune system.
 
-RELEASED: March 5th, 2025\
+RELEASED: March 6th, 2025\
 LANGUAGE: Python\
 LICENSE: Apache 2.0
 
 
 ## Documentation
-Documentation of the source code can be found through [docs].
+Documentation of the source code can be found through [docs](https://cossas.gitlab.io/sh4cs).
 
 ## Context and background
 In the continuous battle between cyber attackers and defenders, the ultimate objective is to make software and systems autonomously cyber resilient. One way to implement autonomous resilience on the software deployment level is provided by TNO’s Self-Healing for Cyber Security (SH4CS) software, inspired by biological defence mechanisms.
