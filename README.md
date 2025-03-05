@@ -9,7 +9,7 @@
 SH4CS extends Kubernetes with regeneration and self-healing properties inspired by the human immune system.</div>
 <hr style="border:2px solid gray"> </hr>
 
-_All COSSAS projects are hosted on [GitLab](https://gitlab.com/cossas/sh4cs/) with a push mirror to GitHub. For issues/contributions check [CONTRIBUTING.md](https://gitlab.com/cossas/home/-/blob/main/CONTRIBUTING.md)_ 
+_All COSSAS projects are hosted on [GitLab](https://gitlab.com/cossas/sh4cs/) with a push mirror to GitHub. For issues/contributions check [CONTRIBUTING.md](https://gitlab.com/cossas/home/-/blob/main/CONTRIBUTING.md)_
 
 
 # Self-Healing for Cyber Security 2.0 (SH4CS)
